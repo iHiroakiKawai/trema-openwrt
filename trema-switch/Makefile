@@ -31,20 +31,20 @@ define Package/trema-switch/description
 endef
 
 define Build/Compile
-  (cd $(PKG_BUILD_DIR)/trema-edge-master; \
-    $(TARGET_CC) $(TARGET_CFLAGS) -std=gnu99 -D_GNU_SOURCE -DNOT_TESTED \
-      -Isrc/lib -Isrc/switch/datapath -Isrc/switch/switch \
-      src/lib/*.c src/switch/datapath/*.c src/switch/switch/*.c \
-      -lsqlite3 -lpthread -lrt -o $(PKG_BUILD_DIR)/trema-switch)
+	(cd $(PKG_BUILD_DIR)/trema-edge-master; \
+	  $(TARGET_CC) $(TARGET_CFLAGS) -std=gnu99 -D_GNU_SOURCE -DNOT_TESTED \
+	  -Isrc/lib -Isrc/switch/datapath -Isrc/switch/switch \
+	  src/lib/*.c src/switch/datapath/*.c src/switch/switch/*.c \
+	  -lsqlite3 -lpthread -lrt -o $(PKG_BUILD_DIR)/trema-switch)
 endef
 
 define Package/trema-switch/install
-  $(INSTALL_DIR) $(1)/sbin
-  $(INSTALL_BIN) $(PKG_BUILD_DIR)/trema-switch $(1)/sbin
-  $(INSTALL_DIR) $(1)/etc/config
-  $(INSTALL_DATA) ./files/trema-switch.conf $(1)/etc/config/trema-switch
-  $(INSTALL_DIR) $(1)//etc/init.d
-  $(INSTALL_BIN) ./files/trema-switch.init $(1)/etc/init.d/trema-switch
+	$(INSTALL_DIR) $(1)/sbin
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/trema-switch $(1)/sbin
+	$(INSTALL_DIR) $(1)/etc/config
+	$(INSTALL_DATA) ./files/trema-switch.conf $(1)/etc/config/trema-switch
+	$(INSTALL_DIR) $(1)//etc/init.d
+	$(INSTALL_BIN) ./files/trema-switch.init $(1)/etc/init.d/trema-switch
 endef
 
 $(eval $(call BuildPackage,trema-switch))
