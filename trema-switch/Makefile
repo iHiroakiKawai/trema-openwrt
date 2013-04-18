@@ -38,7 +38,7 @@ define Build/Compile
       -lsqlite3 -lpthread -lrt -o $(PKG_BUILD_DIR)/trema-switch)
 endef
 
-define Package/trema/switch/install
+define Package/trema-switch/install
   $(INSTALL_DIR) $(1)/sbin
   $(INSTALL_BIN) $(PKG_BUILD_DIR)/trema-switch $(1)/sbin
   $(INSTALL_DIR) $(1)/etc/config
