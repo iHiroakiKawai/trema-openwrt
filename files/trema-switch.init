@@ -1,0 +1,36 @@
+#!/bin/sh /etc/rc.common
+CONFIG=/etc/config/trema-switch
+TREMA_HOME=/var/lib/trema-switch
+DATAPATH_ID=0x4649
+SERVICE_USE_PID=1
+SERVICE_PID_FILE=${TREMA_HOME}/tmp/pid/switch.${DATAPATH_ID}.pid
+
+load() {
+  local datapath_id
+  local ports
+  local server
+
+  config_get datapath_id $1 dp "0x4649"
+  config_get ports $1 ofports "eth0,wlan0"
+  config_get server $1 ofctl "127.0.0.1:6633"
+
+  server_host="$(echo -n "$server" | cut -d: -f1)"
+  server_port="$(echo -n "$server" | cut -d: -f2)"
+  mkdir -p ${TREMA_HOME}/tmp/log
+  mkdir -p ${TREMA_HOME}/tmp/pid
+  export TREMA_HOME
+  if [ x${server_port} = x ] ; then
+    service_start /sbin/tremaswitch -d -i $datapath_id -e $ports -c $server_host
+  else
+    service_start /sbin/tremaswitch -d -i $datapath_id -e $ports -c $server_host -p $server_port
+  fi
+}
+
+start() {
+  config_load ${CONFIG}
+  config_foreach load ofswitch
+}
+
+stop() {
+  service_stop /sbin/tremaswitch
+}
