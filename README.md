@@ -1,6 +1,6 @@
 About
 -----
-This is a openwrt feed providing trema-edge switch program.
+This is an openwrt feed providing trema-edge switch program.
 
 To configure the openwrt buildroot, edit feeds.conf and 
 put this feed entry like following:
