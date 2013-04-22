@@ -4,6 +4,7 @@ TREMA_HOME=/var/lib/trema-switch
 DATAPATH_ID=0x4649
 SERVICE_USE_PID=1
 SERVICE_PID_FILE=${TREMA_HOME}/tmp/pid/switch.${DATAPATH_ID}.pid
+SERVICE_SIG_STOP=INT
 
 load() {
   local datapath_id
