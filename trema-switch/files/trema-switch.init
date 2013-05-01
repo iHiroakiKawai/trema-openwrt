@@ -6,10 +6,12 @@ SERVICE_USE_PID=1
 SERVICE_PID_FILE=${TREMA_HOME}/tmp/pid/switch.${DATAPATH_ID}.pid
 SERVICE_SIG_STOP=INT
 
-load() {
+start_switch() {
   local datapath_id
   local ports
   local server
+
+  config_list_foreach $1 prestart eval
 
   config_get datapath_id $1 dp "0x4649"
   config_get ports $1 ofports "eth0,wlan0"
@@ -25,13 +27,26 @@ load() {
   else
     service_start /sbin/trema-switch -d -i $datapath_id -e $ports -c $server_host -p $server_port
   fi
+
+  config_list_foreach $1 poststart eval
+}
+
+prestop() {
+  config_list_foreach $1 prestop eval
+}
+
+poststop() {
+  config_list_foreach $1 poststop eval
 }
 
 start() {
   config_load ${CONFIG}
-  config_foreach load ofswitch
+  config_foreach start_switch ofswitch
 }
 
 stop() {
+  config_load ${CONFIG}
+  config_foreach prestop ofswitch
   service_stop /sbin/trema-switch
+  config_foreach poststop ofswitch
 }
