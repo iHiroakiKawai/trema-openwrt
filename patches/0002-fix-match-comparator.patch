@@ -1,0 +1,70 @@
+From 69e06c332558c65befc0ef6f9934e976a35905aa Mon Sep 17 00:00:00 2001
+From: Hiroaki KAWAI <kawai@stratosphere.co.jp>
+Date: Wed, 8 May 2013 15:31:10 +0900
+Subject: [PATCH] Fix match comparator.
+
+Wildcard match will match against any match and non-wildcard match
+will not match against wildcard match.
+---
+ src/switch/datapath/match.c |   16 ++++++++--------
+ 1 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/switch/datapath/match.c b/src/switch/datapath/match.c
+index 9d70c30..b51e926 100644
+--- a/src/switch/datapath/match.c
++++ b/src/switch/datapath/match.c
+@@ -473,10 +473,10 @@ compare_match_strict( const match *x, const match *y ) {
+ 
+ static bool
+ compare_match8( const match8 key, const match8 examinee ) {
+-  if ( ( key.valid && !examinee.valid ) || ( !key.valid && !examinee.valid ) ) {
++  if ( !key.valid ) {
+     return true;
+   }
+-  if ( !key.valid && examinee.valid ) {
++  if ( !examinee.valid ) {
+     return false;
+   }
+ 
+@@ -491,10 +491,10 @@ compare_match8( const match8 key, const match8 examinee ) {
+ 
+ static bool
+ compare_match16( const match16 key, const match16 examinee ) {
+-  if ( ( key.valid && !examinee.valid ) || ( !key.valid && !examinee.valid ) ) {
++  if ( !key.valid ) {
+     return true;
+   }
+-  if ( !key.valid && examinee.valid ) {
++  if ( !examinee.valid ) {
+     return false;
+   }
+ 
+@@ -509,10 +509,10 @@ compare_match16( const match16 key, const match16 examinee ) {
+ 
+ static bool
+ compare_match32( const match32 key, const match32 examinee ) {
+-  if ( ( key.valid && !examinee.valid ) || ( !key.valid && !examinee.valid ) ) {
++  if ( !key.valid ) {
+     return true;
+   }
+-  if ( !key.valid && examinee.valid ) {
++  if ( !examinee.valid ) {
+     return false;
+   }
+ 
+@@ -527,10 +527,10 @@ compare_match32( const match32 key, const match32 examinee ) {
+ 
+ static bool
+ compare_match64( const match64 key, const match64 examinee ) {
+-  if ( ( key.valid && !examinee.valid ) || ( !key.valid && !examinee.valid ) ) {
++  if ( !key.valid ) {
+     return true;
+   }
+-  if ( !key.valid && examinee.valid ) {
++  if ( !examinee.valid ) {
+     return false;
+   }
+ 
+-- 
+1.7.9
+
