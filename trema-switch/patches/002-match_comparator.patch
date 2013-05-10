@@ -1,6 +1,6 @@
 --- a/trema-edge-master/src/switch/datapath/flow_table.c
 +++ b/trema-edge-master/src/switch/datapath/flow_table.c
-@@ -363,15 +363,16 @@ finalize_flow_table( const uint8_t table_id ) {
+@@ -363,15 +363,15 @@ finalize_flow_table( const uint8_t table_id ) {
  
  
  static list_element *
@@ -8,7 +8,6 @@
 +lookup_flow_entries_with_table_id( const uint8_t table_id, const match *match_key, const uint16_t priority,
                                     const bool strict, const bool update_counters ) {
    assert( valid_table_id( table_id ) );
-+  assert( strict == true || priority == 0 );
  
    if ( get_logging_level() >= LOG_DEBUG ) {
      debug( "Looking up flow entries ( table_id = %#x, match = %p, priority = %u, strict = %s, update_counters = %s ).",
@@ -21,7 +20,7 @@
      }
    }
  
-@@ -390,11 +391,21 @@ lookup_flow_entries_with_table_id( const uint8_t table_id, const match *match, c
+@@ -390,11 +390,21 @@ lookup_flow_entries_with_table_id( const uint8_t table_id, const match *match, c
    for ( list_element *e = table->entries; e != NULL; e = e->next ) {
      flow_entry *entry = e->data;
      assert( entry != NULL );
@@ -44,7 +43,7 @@
          if ( update_counters ) {
            increment_matched_count( table_id );
          }
-@@ -403,7 +414,7 @@ lookup_flow_entries_with_table_id( const uint8_t table_id, const match *match, c
+@@ -403,7 +413,7 @@ lookup_flow_entries_with_table_id( const uint8_t table_id, const match *match, c
        }
      }
      else {
