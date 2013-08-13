@@ -1,5 +1,5 @@
---- a/src/lib/buffer.c
-+++ b/src/lib/buffer.c
+--- a/trema-edge-master/src/lib/buffer.c
++++ b/trema-edge-master/src/lib/buffer.c
 @@ -301,6 +301,13 @@ void
  reset_buffer( buffer *buf ) {
    assert( buf != NULL );
@@ -14,10 +14,10 @@
    pthread_mutex_lock( ( ( private_buffer * ) buf )->mutex );
  
    private_buffer *pbuf = ( private_buffer * ) buf;
-diff --git a/src/lib/ether.h b/src/lib/ether.h
+diff --git a/trema-edge-master/src/lib/ether.h b/trema-edge-master/src/lib/ether.h
 index fa3c0a1..68aee8c 100644
---- a/src/lib/ether.h
-+++ b/src/lib/ether.h
+--- a/trema-edge-master/src/lib/ether.h
++++ b/trema-edge-master/src/lib/ether.h
 @@ -42,7 +42,11 @@
  #define ETH_ETHTYPE_IPV4 0x0800
  #define ETH_ETHTYPE_ARP 0x0806
@@ -31,10 +31,10 @@ index fa3c0a1..68aee8c 100644
  #define ETH_ETHTYPE_IPV6 0x86DD
  #define ETH_ETHTYPE_EAPOL 0x88c7
  #define ETH_ETHTYPE_LLDP 0x88cc
-diff --git a/src/lib/openflow_message.c b/src/lib/openflow_message.c
+diff --git a/trema-edge-master/src/lib/openflow_message.c b/trema-edge-master/src/lib/openflow_message.c
 index 1a37c50..8f6bc8a 100644
---- a/src/lib/openflow_message.c
-+++ b/src/lib/openflow_message.c
+--- a/trema-edge-master/src/lib/openflow_message.c
++++ b/trema-edge-master/src/lib/openflow_message.c
 @@ -32,6 +32,7 @@
  #include "wrapper.h"
  #include "log.h"
@@ -683,10 +683,10 @@ index 1a37c50..8f6bc8a 100644
    if ( q != NULL ) {
      xfree( q );
    }
-diff --git a/src/lib/openflow_message.h b/src/lib/openflow_message.h
+diff --git a/trema-edge-master/src/lib/openflow_message.h b/trema-edge-master/src/lib/openflow_message.h
 index 302f292..09cc424 100644
---- a/src/lib/openflow_message.h
-+++ b/src/lib/openflow_message.h
+--- a/trema-edge-master/src/lib/openflow_message.h
++++ b/trema-edge-master/src/lib/openflow_message.h
 @@ -161,36 +161,46 @@ buffer *create_desc_multipart_reply( const uint32_t transaction_id, const uint16
                                       const char serial_num[ SERIAL_NUM_LEN ],
                                       const char dp_desc[ DESC_STR_LEN ] );
@@ -744,10 +744,10 @@ index 302f292..09cc424 100644
  buffer *create_experimenter_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
                                               const uint32_t experimenter, const uint32_t exp_type, const buffer *body );
  buffer *create_barrier_request( const uint32_t transaction_id );
-diff --git a/src/lib/packet_info.c b/src/lib/packet_info.c
+diff --git a/trema-edge-master/src/lib/packet_info.c b/trema-edge-master/src/lib/packet_info.c
 index fa9d98f..54b8c3e 100644
---- a/src/lib/packet_info.c
-+++ b/src/lib/packet_info.c
+--- a/trema-edge-master/src/lib/packet_info.c
++++ b/trema-edge-master/src/lib/packet_info.c
 @@ -37,6 +37,12 @@ void
  calloc_packet_info( buffer *buf ) {
    die_if_NULL( buf );
@@ -793,10 +793,10 @@ index fa9d98f..54b8c3e 100644
  packet_info
  get_packet_info( const buffer *frame ) {
    die_if_NULL( frame );
-diff --git a/src/lib/packet_info.h b/src/lib/packet_info.h
+diff --git a/trema-edge-master/src/lib/packet_info.h b/trema-edge-master/src/lib/packet_info.h
 index 7a66bc8..aa9dd5f 100644
---- a/src/lib/packet_info.h
-+++ b/src/lib/packet_info.h
+--- a/trema-edge-master/src/lib/packet_info.h
++++ b/trema-edge-master/src/lib/packet_info.h
 @@ -237,6 +237,7 @@ bool parse_packet( buffer *buf );
  
  void calloc_packet_info( buffer *frame );
@@ -805,10 +805,10 @@ index 7a66bc8..aa9dd5f 100644
  packet_info get_packet_info( const buffer *frame );
  
  bool packet_type_eth_dix( const buffer *frame );
-diff --git a/src/lib/packet_parser.c b/src/lib/packet_parser.c
+diff --git a/trema-edge-master/src/lib/packet_parser.c b/trema-edge-master/src/lib/packet_parser.c
 index 45e2f26..7170f2b 100644
---- a/src/lib/packet_parser.c
-+++ b/src/lib/packet_parser.c
+--- a/trema-edge-master/src/lib/packet_parser.c
++++ b/trema-edge-master/src/lib/packet_parser.c
 @@ -67,7 +67,11 @@ parse_ether( buffer *buf ) {
    }
  
@@ -841,10 +841,10 @@ index 45e2f26..7170f2b 100644
      // Check the length of remained buffer
      length = REMAINED_BUFFER_LENGTH( buf, ptr );
      if ( length < sizeof( vlantag_header_t ) ) {
-diff --git a/src/switch/datapath/action_executor.c b/src/switch/datapath/action_executor.c
+diff --git a/trema-edge-master/src/switch/datapath/action_executor.c b/trema-edge-master/src/switch/datapath/action_executor.c
 index 118b450..27653fa 100644
---- a/src/switch/datapath/action_executor.c
-+++ b/src/switch/datapath/action_executor.c
+--- a/trema-edge-master/src/switch/datapath/action_executor.c
++++ b/trema-edge-master/src/switch/datapath/action_executor.c
 @@ -347,7 +347,7 @@ set_vlan_vid( buffer *frame, uint16_t value ) {
    }
  
@@ -930,10 +930,10 @@ index 118b450..27653fa 100644
      warn( "A non-ip packet (%#x) found while setting the ttl field.", info->format );
      return true;
    }
-diff --git a/src/switch/datapath/async_event_notifier.c b/src/switch/datapath/async_event_notifier.c
+diff --git a/trema-edge-master/src/switch/datapath/async_event_notifier.c b/trema-edge-master/src/switch/datapath/async_event_notifier.c
 index 8484e9f..3a487f7 100644
---- a/src/switch/datapath/async_event_notifier.c
-+++ b/src/switch/datapath/async_event_notifier.c
+--- a/trema-edge-master/src/switch/datapath/async_event_notifier.c
++++ b/trema-edge-master/src/switch/datapath/async_event_notifier.c
 @@ -163,10 +163,8 @@ save_packet( const buffer *packet ) {
    uint32_t buffer_id = get_buffer_id();
    if ( buffer_id != UINT32_MAX ) {
@@ -947,10 +947,10 @@ index 8484e9f..3a487f7 100644
      time_now( &packet_in_buffers[ buffer_id ].saved_at );
    }
  
-diff --git a/src/switch/datapath/ether_device.c b/src/switch/datapath/ether_device.c
+diff --git a/trema-edge-master/src/switch/datapath/ether_device.c b/trema-edge-master/src/switch/datapath/ether_device.c
 index 616032b..6d90487 100644
---- a/src/switch/datapath/ether_device.c
-+++ b/src/switch/datapath/ether_device.c
+--- a/trema-edge-master/src/switch/datapath/ether_device.c
++++ b/trema-edge-master/src/switch/datapath/ether_device.c
 @@ -342,6 +342,7 @@ receive_frame( int fd, void *user_data ) {
              get_packet_buffers_length( device->recv_queue ), max_queue_length );
        frame = device->recv_buffer; // Use recv_buffer as a trash.
@@ -969,10 +969,10 @@ index 616032b..6d90487 100644
      count++;
    }
  
-diff --git a/src/switch/datapath/port_manager.c b/src/switch/datapath/port_manager.c
+diff --git a/trema-edge-master/src/switch/datapath/port_manager.c b/trema-edge-master/src/switch/datapath/port_manager.c
 index 48ded62..6164a89 100644
---- a/src/switch/datapath/port_manager.c
-+++ b/src/switch/datapath/port_manager.c
+--- a/trema-edge-master/src/switch/datapath/port_manager.c
++++ b/trema-edge-master/src/switch/datapath/port_manager.c
 @@ -501,6 +501,8 @@ get_port_stats( const uint32_t port_no, port_stats **stats, uint32_t *n_ports )
      stat++;
    }
@@ -991,10 +991,10 @@ index 48ded62..6164a89 100644
    if ( !unlock_mutex( &mutex ) ) {
      return ERROR_UNLOCK;
    }
-diff --git a/src/switch/switch/protocol-handler.c b/src/switch/switch/protocol-handler.c
+diff --git a/trema-edge-master/src/switch/switch/protocol-handler.c b/trema-edge-master/src/switch/switch/protocol-handler.c
 index f246061..5a8a38c 100644
---- a/src/switch/switch/protocol-handler.c
-+++ b/src/switch/switch/protocol-handler.c
+--- a/trema-edge-master/src/switch/switch/protocol-handler.c
++++ b/trema-edge-master/src/switch/switch/protocol-handler.c
 @@ -45,7 +45,8 @@ bool mock_switch_send_openflow_message( buffer *message );
  
  static void
@@ -1035,10 +1035,10 @@ index f246061..5a8a38c 100644
    free_buffer( features_reply );
  }
  void ( *handle_features_request )( const uint32_t transaction_id, void *user_data ) = _handle_features_request;
-diff --git a/src/switch/switch/stats-helper.h b/src/switch/switch/stats-helper.h
+diff --git a/trema-edge-master/src/switch/switch/stats-helper.h b/trema-edge-master/src/switch/switch/stats-helper.h
 index 7ae0553..af8d0dc 100644
---- a/src/switch/switch/stats-helper.h
-+++ b/src/switch/switch/stats-helper.h
+--- a/trema-edge-master/src/switch/switch/stats-helper.h
++++ b/trema-edge-master/src/switch/switch/stats-helper.h
 @@ -26,11 +26,14 @@ extern "C" {
  
  
