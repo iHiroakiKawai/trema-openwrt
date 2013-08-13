@@ -844,7 +844,7 @@ index 45e2f26..7170f2b 100644
      length = REMAINED_BUFFER_LENGTH( buf, ptr );
      if ( length < sizeof( vlantag_header_t ) ) {
 diff --git a/trema-edge-master/src/switch/datapath/action_executor.c b/trema-edge-master/src/switch/datapath/action_executor.c
-index 118b450..69a6c91 100644
+index 118b450..b32c495 100644
 --- a/trema-edge-master/src/switch/datapath/action_executor.c
 +++ b/trema-edge-master/src/switch/datapath/action_executor.c
 @@ -347,7 +347,7 @@ set_vlan_vid( buffer *frame, uint16_t value ) {
@@ -900,31 +900,40 @@ index 118b450..69a6c91 100644
    *mpls = *mpls | htonl( 0x00000100 );
  
    return parse_frame( frame );
-@@ -1144,11 +1147,12 @@ execute_action_push_vlan( buffer *frame, action *push_vlan ) {
+@@ -1144,25 +1147,17 @@ execute_action_push_vlan( buffer *frame, action *push_vlan ) {
    if ( start == NULL ) {
      start = info->l2_payload;
    }
 +  size_t vlan_offset = start - frame->data;
  
-   push_vlan_tag( frame, start );
+-  push_vlan_tag( frame, start );
    ether_header_t *ether_header = ( ether_header_t * ) frame->data;
-   ether_header->type = htons( push_vlan->ethertype );
+-  ether_header->type = htons( push_vlan->ethertype );
 -  vlantag_header_t *vlan_header = ( vlantag_header_t * ) start;
-+  vlantag_header_t *vlan_header = ( vlantag_header_t * )( frame->data + vlan_offset );
++  uint16_t next_type = ether_header->type;
  
-   uint16_t next_type = 0;
-   if ( packet_type_ipv4( frame ) ) {
-@@ -1157,6 +1161,9 @@ execute_action_push_vlan( buffer *frame, action *push_vlan ) {
-   else if ( packet_type_ipv6( frame ) ) {
-     next_type = ETH_ETHTYPE_IPV6;
-   }
-+  else if ( packet_type_arp( frame ) ) {
-+    next_type = ETH_ETHTYPE_ARP;
-+  }
-   else {
-     warn( "Unsupported packet found (%#x) while pushing a vlan tag.", info->format );
-     return true;
-@@ -1190,6 +1197,7 @@ execute_action_copy_ttl_out( buffer *frame, action *copy_ttl_out ) {
+-  uint16_t next_type = 0;
+-  if ( packet_type_ipv4( frame ) ) {
+-    next_type = ETH_ETHTYPE_IPV4;
+-  }
+-  else if ( packet_type_ipv6( frame ) ) {
+-    next_type = ETH_ETHTYPE_IPV6;
+-  }
+-  else {
+-    warn( "Unsupported packet found (%#x) while pushing a vlan tag.", info->format );
+-    return true;
+-  }
++  push_vlan_tag( frame, start );
+ 
+-  vlan_header->type = htons( next_type );
++  ether_header = ( ether_header_t * ) frame->data;
++  ether_header->type = htons( push_vlan->ethertype );
++  vlantag_header_t *vlan_header = ( vlantag_header_t * )( frame->data + vlan_offset );
++  vlan_header->type = next_type;
+ 
+   return parse_frame( frame );
+ }
+@@ -1190,6 +1185,7 @@ execute_action_copy_ttl_out( buffer *frame, action *copy_ttl_out ) {
      ttl = ipv6_header->hoplimit;
    }
    else {
@@ -945,7 +954,7 @@ index 8484e9f..3a487f7 100644
 -      memcpy( packet_in_buffers[ buffer_id ].packet->user_data, packet->user_data, sizeof( packet_info ) );
 -    }
 +    // duplicate_buffer() copies user_data, which points to old packet addresses
-+    copy_packet_info( packet_in_buffers[ buffer_id ].packet, packet );
++    copy_packet_info( duplicate_buffer[ buffer_id ]->user_data, packet );
      time_now( &packet_in_buffers[ buffer_id ].saved_at );
    }
  
