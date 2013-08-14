@@ -65,7 +65,7 @@ index 7a66bc8..aa9dd5f 100644
  
  bool packet_type_eth_dix( const buffer *frame );
 diff --git a/trema-edge-master/src/switch/datapath/action_executor.c b/trema-edge-master/src/switch/datapath/action_executor.c
-index 0b41b87..ad47602 100644
+index 3190c53..36472c9 100644
 --- a/trema-edge-master/src/switch/datapath/action_executor.c
 +++ b/trema-edge-master/src/switch/datapath/action_executor.c
 @@ -1150,29 +1150,16 @@ execute_action_push_vlan( buffer *frame, action *push_vlan ) {
@@ -122,7 +122,7 @@ index 8484e9f..f354d3a 100644
    }
  
 diff --git a/trema-edge-master/src/switch/datapath/ether_device.c b/trema-edge-master/src/switch/datapath/ether_device.c
-index 616032b..9281f99 100644
+index 616032b..de6e4f1 100644
 --- a/trema-edge-master/src/switch/datapath/ether_device.c
 +++ b/trema-edge-master/src/switch/datapath/ether_device.c
 @@ -342,8 +342,32 @@ receive_frame( int fd, void *user_data ) {
@@ -136,23 +136,23 @@ index 616032b..9281f99 100644
 +    ssize_t length = 0;
 +    struct pcap_pkthdr *header = NULL;
 +    const u_char *packet = NULL;
-+    int ret = pcap_next_ex(device->pcap, &header, &packet);
-+    if (ret==1){
++    int ret = pcap_next_ex( device->pcap, &header, &packet );
++    if ( ret == 1 ) {
 +      length = header->caplen;
-+      if (length > frame->length) {
++      if ( length > frame->length ) {
 +        append_back_buffer( frame, length - frame->length );
 +      }
 +      memcpy( frame->data, packet, length );
-+    }else{
++    }
++    else {
 +      if ( frame != device->recv_buffer ) {
 +        mark_packet_buffer_as_used( device->recv_queue, frame );
 +      }
-+      if (ret==-1){
++      if ( ret == -1 ) {
 +        error( "Receive error ( device = %s, pcap_err = %s ).",
-+             device->name, pcap_geterr(device->pcap));
-+        break;
++             device->name, pcap_geterr( device->pcap ) );
 +      }
-+      continue;
++      break;
 +    }
 +#else // WITH_PCAP
      ssize_t length = recv( device->fd, frame->data, frame->length, MSG_DONTWAIT );
@@ -178,9 +178,9 @@ index 616032b..9281f99 100644
    buffer *buf = NULL;
    while ( ( buf = peek_packet_buffer( device->send_queue ) ) != NULL && count < 256 ) {
 +#if WITH_PCAP
-+    if( pcap_sendpacket(device->pcap, buf->data, buf->length) < 0){
-+      error("Failed to send a message to ethernet device ( device =%s, pcap_err=%s).",
-+        device->name, pcap_geterr(device->pcap));
++    if( pcap_sendpacket( device->pcap, buf->data, buf->length ) < 0 ){
++      error( "Failed to send a message to ethernet device ( device = %s, pcap_err = %s ).",
++        device->name, pcap_geterr( device->pcap ) );
 +      return;
 +    }
 +    ssize_t length = buf->length;
@@ -200,14 +200,14 @@ index 616032b..9281f99 100644
  
    close( nfd );
  
-+#if WITH_PCAP
-+  char errbuf[PCAP_ERRBUF_SIZE];
-+  pcap_t *handle = pcap_open_live(name, BUFSIZ, 1, 1000, errbuf);
-+  if(handle==NULL){
-+    error("device %s open failed %s", name, errbuf);
++#ifdef WITH_PCAP
++  char errbuf[ PCAP_ERRBUF_SIZE ];
++  pcap_t *handle = pcap_open_live( name, BUFSIZ, 1, 100, errbuf );
++  if( handle == NULL ){
++    error( "device %s open failed %s", name, errbuf );
 +    return NULL;
 +  }
-+  int fd = pcap_get_selectable_fd(handle);
++  int fd = pcap_get_selectable_fd( handle );
 +#else // WITH_PCAP
    int fd = socket( PF_PACKET, SOCK_RAW, htons( ETH_P_ALL ) );
    if ( fd < 0 ) {
