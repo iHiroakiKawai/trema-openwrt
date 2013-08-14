@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=trema-switch
 PKG_RELEASE:=1
 
-PKG_SOURCE:=master.zip
+PKG_SOURCE:=trema-edge-master.zip
 PKG_SOURCE_URL:=https://github.com/trema/trema-edge/archive/
 PKG_MAINTAINER:=Hiroaki KAWAI <kawai@stratosphere.co.jp>
 
@@ -23,7 +23,7 @@ define Package/trema-switch
   SECTION:=net
   CATEGORY:=Network
   TITLE:=trema edge openflow 1.3 software switch
-  DEPENDS:=+libsqlite3 +librt +libpthread
+  DEPENDS:=+libsqlite3 +librt +libpthread +libpcap
 endef
 
 define Package/trema-switch/description
@@ -32,10 +32,10 @@ endef
 
 define Build/Compile
 	(cd $(PKG_BUILD_DIR)/trema-edge-master; \
-	  $(TARGET_CC) $(TARGET_CFLAGS) -std=gnu99 -D_GNU_SOURCE -DNOT_TESTED \
+	  $(TARGET_CC) $(TARGET_CFLAGS) -Os -Wl,-s -std=gnu99 -DWITH_PCAP -D_GNU_SOURCE -DNOT_TESTED \
 	  -Isrc/lib -Isrc/switch/datapath -Isrc/switch/switch \
 	  src/lib/*.c src/switch/datapath/*.c src/switch/switch/*.c \
-	  -lsqlite3 -lpthread -lrt -o $(PKG_BUILD_DIR)/trema-switch)
+	  -lsqlite3 -lpthread -lrt -lpcap -o $(PKG_BUILD_DIR)/trema-switch)
 endef
 
 define Package/trema-switch/install

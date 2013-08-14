@@ -16,754 +16,11 @@ index fe019cc..3004a3b 100644
    pthread_mutex_lock( ( ( private_buffer * ) buf )->mutex );
  
    private_buffer *pbuf = ( private_buffer * ) buf;
-diff --git a/trema-edge-master/src/lib/ether.h b/trema-edge-master/src/lib/ether.h
-index fa3c0a1..68aee8c 100644
---- a/trema-edge-master/src/lib/ether.h
-+++ b/trema-edge-master/src/lib/ether.h
-@@ -42,7 +42,11 @@
- #define ETH_ETHTYPE_IPV4 0x0800
- #define ETH_ETHTYPE_ARP 0x0806
- #define ETH_ETHTYPE_TPID 0x8100
--#define ETH_ETHTYPE_PBB 0x88A8
-+#define ETH_ETHTYPE_TPID1 0x88a8
-+#define ETH_ETHTYPE_TPID2 0x9100
-+#define ETH_ETHTYPE_TPID3 0x9200
-+#define ETH_ETHTYPE_TPID4 0x9300
-+#define ETH_ETHTYPE_PBB 0x88e7
- #define ETH_ETHTYPE_IPV6 0x86DD
- #define ETH_ETHTYPE_EAPOL 0x88c7
- #define ETH_ETHTYPE_LLDP 0x88cc
-diff --git a/trema-edge-master/src/lib/openflow_message.c b/trema-edge-master/src/lib/openflow_message.c
-index 1a37c50..8f6bc8a 100644
---- a/trema-edge-master/src/lib/openflow_message.c
-+++ b/trema-edge-master/src/lib/openflow_message.c
-@@ -32,6 +32,7 @@
- #include "wrapper.h"
- #include "log.h"
- 
-+#define UINT16_T_MAX 0xffff
- 
- #ifdef UNIT_TESTING
- 
-@@ -1331,8 +1332,9 @@ create_desc_multipart_reply( const uint32_t transaction_id, const uint16_t flags
- 
- buffer *
- create_flow_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                         const list_element *flows_stats_head ) {
-+                         const list_element *flows_stats_head, int *more, int *offset ) {
-   int n_flows = 0;
-+  uint16_t msg_flags = flags;
-   uint16_t length = 0;
-   buffer *buffer;
-   list_element *f = NULL;
-@@ -1343,13 +1345,25 @@ create_flow_multipart_reply( const uint32_t transaction_id, const uint16_t flags
-   debug( "Creating a flow multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( flows_stats_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ) {
-+      flows_stats_head = flows_stats_head->next;
-+      cur++;
-+    }
-     f = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( f, flows_stats_head, sizeof( list_element ) );
-   }
- 
-   flow = f;
-+  *more = 0;
-   while ( flow != NULL ) {
-     flow_stats = flow->data;
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + length + flow_stats->length > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     length = ( uint16_t ) ( length + flow_stats->length );
-     n_flows++;
-     flow = flow->next;
-@@ -1359,20 +1373,23 @@ create_flow_multipart_reply( const uint32_t transaction_id, const uint16_t flags
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body ) + length );
- 
--  buffer = create_multipart_reply( transaction_id, OFPMP_FLOW, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_FLOW, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   flow_stats = ( struct ofp_flow_stats * ) stats_reply->body;
- 
-   flow = f;
--  while ( flow != NULL ) {
-+  int n_data = 0;
-+  while ( flow != NULL && n_data < n_flows ) {
-     fs = ( struct ofp_flow_stats * ) flow->data;
-     hton_flow_stats( flow_stats, fs );
-     flow_stats = ( struct ofp_flow_stats * ) ( ( char * ) flow_stats + fs->length );
-     flow = flow->next;
-+    n_data++;
-   }
- 
-+  *offset += n_flows;
-   if ( f != NULL ) {
-     xfree( f );
-   }
-@@ -1412,8 +1429,9 @@ create_aggregate_multipart_reply( const uint32_t transaction_id, const uint16_t
- 
- buffer *
- create_table_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                          const list_element *table_stats_head ) {
-+                          const list_element *table_stats_head, int *more, int *offset ) {
-   uint16_t length;
-+  uint16_t msg_flags = flags;
-   uint16_t n_tables = 0;
-   buffer *buffer;
-   list_element *t = NULL;
-@@ -1424,12 +1442,24 @@ create_table_multipart_reply( const uint32_t transaction_id, const uint16_t flag
-   debug( "Creating a table multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( table_stats_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ) {
-+      table_stats_head = table_stats_head->next;
-+      cur++;
-+    }
-     t = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( t, table_stats_head, sizeof( list_element ) );
-   }
- 
-   table = t;
-+  *more = 0;
-   while ( table != NULL ) {
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + sizeof( struct ofp_table_stats ) * ( n_tables + 1 ) > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     n_tables++;
-     table = table->next;
-   }
-@@ -1438,20 +1468,23 @@ create_table_multipart_reply( const uint32_t transaction_id, const uint16_t flag
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body )
-                         + sizeof( struct ofp_table_stats ) * n_tables );
--  buffer = create_multipart_reply( transaction_id, OFPMP_TABLE, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_TABLE, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   table_stats = ( struct ofp_table_stats * ) stats_reply->body;
- 
-   table = t;
--  while ( table != NULL ) {
-+  int n_data = 0;
-+  while ( table != NULL && n_data < n_tables ) {
-     ts = ( struct ofp_table_stats * ) table->data;
-     hton_table_stats( table_stats, ts );
-     table = table->next;
-     table_stats++;
-+    n_data++;
-   }
- 
-+  *offset += n_tables;
-   if ( t != NULL ) {
-     xfree( t );
-   }
-@@ -1462,8 +1495,9 @@ create_table_multipart_reply( const uint32_t transaction_id, const uint16_t flag
- 
- buffer *
- create_port_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                         const list_element *port_stats_head ) {
-+                         const list_element *port_stats_head, int *more, int *offset ) {
-   uint16_t length;
-+  uint16_t msg_flags = flags;
-   uint16_t n_ports = 0;
-   buffer *buffer;
-   list_element *p = NULL;
-@@ -1474,12 +1508,24 @@ create_port_multipart_reply( const uint32_t transaction_id, const uint16_t flags
-   debug( "Creating a port multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( port_stats_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ) {
-+      port_stats_head = port_stats_head->next;
-+      cur++;
-+    }
-     p = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( p, port_stats_head, sizeof( list_element ) );
-   }
- 
-   port = p;
-+  *more = 0;
-   while ( port != NULL ) {
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + sizeof( struct ofp_port_stats ) * ( n_ports + 1 ) > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     n_ports++;
-     port = port->next;
-   }
-@@ -1488,20 +1534,23 @@ create_port_multipart_reply( const uint32_t transaction_id, const uint16_t flags
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body )
-                           + sizeof( struct ofp_port_stats ) * n_ports );
--  buffer = create_multipart_reply( transaction_id, OFPMP_PORT_STATS, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_PORT_STATS, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   port_stats = ( struct ofp_port_stats * ) stats_reply->body;
- 
-   port = p;
--  while ( port != NULL ) {
-+  int n_data = 0;
-+  while ( port != NULL && n_data < n_ports ) {
-     ps = ( struct ofp_port_stats * ) port->data;
-     hton_port_stats( port_stats, ps );
-     port = port->next;
-     port_stats++;
-+    n_data++;
-   }
- 
-+  *offset += n_ports;
-   if ( p != NULL ) {
-     xfree( p );
-   }
-@@ -1512,8 +1561,9 @@ create_port_multipart_reply( const uint32_t transaction_id, const uint16_t flags
- 
- buffer *
- create_queue_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                          const list_element *queue_stats_head ) {
-+                          const list_element *queue_stats_head, int *more, int *offset ) {
-   uint16_t length;
-+  uint16_t msg_flags = flags;
-   uint16_t n_queues = 0;
-   buffer *buffer;
-   list_element *q = NULL;
-@@ -1524,12 +1574,24 @@ create_queue_multipart_reply( const uint32_t transaction_id, const uint16_t flag
-   debug( "Creating a queue multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( queue_stats_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ) {
-+      queue_stats_head = queue_stats_head->next;
-+      cur++;
-+    }
-     q = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( q, queue_stats_head, sizeof( list_element ) );
-   }
- 
-   queue = q;
-+  *more = 0;
-   while ( queue != NULL ) {
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + sizeof( struct ofp_queue_stats ) * ( n_queues + 1 ) > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     n_queues++;
-     queue = queue->next;
-   }
-@@ -1538,20 +1600,23 @@ create_queue_multipart_reply( const uint32_t transaction_id, const uint16_t flag
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body )
-                           + sizeof( struct ofp_queue_stats ) * n_queues );
--  buffer = create_multipart_reply( transaction_id, OFPMP_QUEUE, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_QUEUE, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   queue_stats = ( struct ofp_queue_stats * ) stats_reply->body;
- 
-   queue = q;
--  while ( queue != NULL ) {
-+  int n_data = 0;
-+  while ( queue != NULL && n_data < n_queues ) {
-     qs = ( struct ofp_queue_stats * ) queue->data;
-     hton_queue_stats( queue_stats, qs );
-     queue = queue->next;
-     queue_stats++;
-+    n_data++;
-   }
- 
-+  *offset += n_queues;
-   if ( q != NULL ) {
-     xfree( q );
-   }
-@@ -1562,8 +1627,9 @@ create_queue_multipart_reply( const uint32_t transaction_id, const uint16_t flag
- 
- buffer *
- create_group_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                              const list_element *group_multipart_head ) {
-+                              const list_element *group_multipart_head, int *more, int *offset ) {
-   uint16_t length;
-+  uint16_t msg_flags = flags;
-   uint16_t n_queues = 0;
-   uint16_t queues_len = 0;
-   buffer *buffer;
-@@ -1575,36 +1641,51 @@ create_group_multipart_reply( const uint32_t transaction_id, const uint16_t flag
-   debug( "Creating a group multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( group_multipart_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ){
-+      group_multipart_head = group_multipart_head->next;
-+      cur++;
-+    }
-     q = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( q, group_multipart_head, sizeof( list_element ) );
-   }
- 
-   queue = q;
-+  *more = 0;
-   while ( queue != NULL ) {
--    n_queues++;
-     group_stats = ( struct ofp_group_stats * ) queue->data;
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + queues_len + group_stats->length > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     queues_len = ( uint16_t ) ( queues_len + group_stats->length );
-     queue = queue->next;
-+    n_queues++;
-   }
- 
-   debug( "# of groups = %u.", n_queues );
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body )
-                           + queues_len );
--  buffer = create_multipart_reply( transaction_id, OFPMP_GROUP, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_GROUP, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   group_stats = ( struct ofp_group_stats * ) stats_reply->body;
- 
-   queue = q;
--  while ( queue != NULL ) {
-+  int n_data = 0;
-+  while ( queue != NULL && n_data < n_queues) {
-     qs = ( struct ofp_group_stats * ) queue->data;
-     hton_group_stats( group_stats, qs );
-     queue = queue->next;
-     group_stats = ( struct ofp_group_stats * ) ( ( char * ) group_stats + qs->length );
-+    n_data++;
-   }
- 
-+  *offset += n_queues;
-   if ( q != NULL ) {
-     xfree( q );
-   }
-@@ -1615,8 +1696,9 @@ create_group_multipart_reply( const uint32_t transaction_id, const uint16_t flag
- 
- buffer *
- create_group_desc_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                   const list_element *group_desc_multipart_head ) {
-+                                   const list_element *group_desc_multipart_head, int *more, int *offset ) {
-   uint16_t length;
-+  uint16_t msg_flags = flags;
-   uint16_t n_queues = 0;
-   uint16_t group_descs_len = 0;
-   buffer *buffer;
-@@ -1628,36 +1710,51 @@ create_group_desc_multipart_reply( const uint32_t transaction_id, const uint16_t
-   debug( "Creating a group desc multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( group_desc_multipart_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ) {
-+      group_desc_multipart_head = group_desc_multipart_head->next;
-+      cur++;
-+    }
-     q = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( q, group_desc_multipart_head, sizeof( list_element ) );
-   }
- 
-   queue = q;
-+  *more = 0;
-   while ( queue != NULL ) {
--    n_queues++;
-     group_desc = ( struct ofp_group_desc * ) queue->data;
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + group_descs_len + group_desc->length > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     group_descs_len = ( uint16_t ) ( group_descs_len + group_desc->length );
-     queue = queue->next;
-+    n_queues++;
-   }
- 
-   debug( "# of group_descs = %u.", n_queues );
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body )
-                           + group_descs_len );
--  buffer = create_multipart_reply( transaction_id, OFPMP_GROUP_DESC, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_GROUP_DESC, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   group_desc = ( struct ofp_group_desc * ) stats_reply->body;
- 
-   queue = q;
--  while ( queue != NULL ) {
-+  int n_data = 0;
-+  while ( queue != NULL && n_data < n_queues ) {
-     qs = ( struct ofp_group_desc * ) queue->data;
-     hton_group_desc( group_desc, qs );
-     queue = queue->next;
-     group_desc = ( struct ofp_group_desc * ) ( ( char * ) group_desc + qs->length );
-+    n_data++;
-   }
- 
-+  *offset += n_queues;
-   if ( q != NULL ) {
-     xfree( q );
-   }
-@@ -1701,8 +1798,9 @@ create_group_features_multipart_reply( const uint32_t transaction_id, const uint
- 
- buffer *
- create_meter_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                              const list_element *meter_multipart_head ) {
-+                              const list_element *meter_multipart_head, int *more, int *offset ) {
-   uint16_t length;
-+  uint16_t msg_flags = flags;
-   uint16_t n_queues = 0;
-   uint16_t meter_len = 0;
-   buffer *buffer;
-@@ -1714,36 +1812,51 @@ create_meter_multipart_reply( const uint32_t transaction_id, const uint16_t flag
-   debug( "Creating a meter multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( meter_multipart_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ) {
-+      meter_multipart_head = meter_multipart_head->next;
-+      cur++;
-+    }
-     q = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( q, meter_multipart_head, sizeof( list_element ) );
-   }
- 
-   queue = q;
-+  *more = 0;
-   while ( queue != NULL ) {
--    n_queues++;
-     meter_stats = ( struct ofp_meter_stats * ) queue->data;
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + meter_len + meter_stats->len > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     meter_len = ( uint16_t ) ( meter_len + meter_stats->len );
-     queue = queue->next;
-+    n_queues++;
-   }
- 
-   debug( "# of meters = %u.", n_queues );
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body )
-                           + meter_len );
--  buffer = create_multipart_reply( transaction_id, OFPMP_METER, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_METER, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   meter_stats = ( struct ofp_meter_stats * ) stats_reply->body;
- 
-   queue = q;
--  while ( queue != NULL ) {
-+  int n_data = 0;
-+  while ( queue != NULL && n_data < n_queues ) {
-     qs = ( struct ofp_meter_stats * ) queue->data;
-     hton_meter_stats( meter_stats, qs );
-     queue = queue->next;
-     meter_stats = ( struct ofp_meter_stats * ) ( ( char * ) meter_stats + qs->len );
-+    n_data++;
-   }
- 
-+  *offset += n_queues;
-   if ( q != NULL ) {
-     xfree( q );
-   }
-@@ -1754,8 +1867,9 @@ create_meter_multipart_reply( const uint32_t transaction_id, const uint16_t flag
- 
- buffer *
- create_meter_config_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                     const list_element *meter_config_multipart_head ) {
-+                                     const list_element *meter_config_multipart_head, int *more, int *offset ) {
-   uint16_t length;
-+  uint16_t msg_flags = flags;
-   uint16_t n_queues = 0;
-   uint16_t meter_len = 0;
-   buffer *buffer;
-@@ -1767,36 +1881,51 @@ create_meter_config_multipart_reply( const uint32_t transaction_id, const uint16
-   debug( "Creating a meter config multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( meter_config_multipart_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ) {
-+      meter_config_multipart_head = meter_config_multipart_head->next;
-+      cur++;
-+    }
-     q = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( q, meter_config_multipart_head, sizeof( list_element ) );
-   }
- 
-   queue = q;
-+  *more = 0;
-   while ( queue != NULL ) {
--    n_queues++;
-     meter_config = ( struct ofp_meter_config * ) queue->data;
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + meter_len + meter_config->length > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     meter_len = ( uint16_t ) ( meter_len + meter_config->length );
-     queue = queue->next;
-+    n_queues++;
-   }
- 
-   debug( "# of meter_configs = %u.", n_queues );
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body )
-                           + meter_len );
--  buffer = create_multipart_reply( transaction_id, OFPMP_METER_CONFIG, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_METER_CONFIG, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   meter_config = ( struct ofp_meter_config * ) stats_reply->body;
- 
-   queue = q;
--  while ( queue != NULL ) {
-+  int n_data = 0;
-+  while ( queue != NULL && n_data < n_queues ) {
-     qs = ( struct ofp_meter_config * ) queue->data;
-     hton_meter_config( meter_config, qs );
-     queue = queue->next;
-     meter_config = ( struct ofp_meter_config * ) ( ( char * ) meter_config + qs->length );
-+    n_data++;
-   }
- 
-+  *offset += n_queues;
-   if ( q != NULL ) {
-     xfree( q );
-   }
-@@ -1838,8 +1967,9 @@ create_meter_features_multipart_reply( const uint32_t transaction_id, const uint
- 
- buffer *
- create_table_features_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                       const list_element *table_features_multipart_head ) {
-+                                       const list_element *table_features_multipart_head, int *more, int *offset ) {
-   uint16_t length;
-+  uint16_t msg_flags = flags;
-   uint16_t n_tblftrs = 0;
-   uint16_t tblftrs_len = 0;
-   buffer *buffer;
-@@ -1850,36 +1980,50 @@ create_table_features_multipart_reply( const uint32_t transaction_id, const uint
-   debug( "Creating a table features multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( table_features_multipart_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ) {
-+      table_features_multipart_head = table_features_multipart_head->next;
-+      cur++;
-+    }
-     l = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( l, table_features_multipart_head, sizeof( list_element ) );
-   }
- 
-   list = l;
-+  *more = 0;
-   while ( list != NULL ) {
--    n_tblftrs++;
-     table_features = ( struct ofp_table_features * ) list->data;
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + tblftrs_len + table_features->length > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     tblftrs_len = ( uint16_t ) ( tblftrs_len + table_features->length );
-     list = list->next;
-+    n_tblftrs++;
-   }
- 
-   debug( "# of table_features = %u.", n_tblftrs );
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body )
-                           + tblftrs_len );
--  buffer = create_multipart_reply( transaction_id, OFPMP_TABLE_FEATURES, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_TABLE_FEATURES, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   table_features = ( struct ofp_table_features * ) stats_reply->body;
- 
-   list = l;
--  while ( list != NULL ) {
-+  int n_data = 0;
-+  while ( list != NULL && n_data < n_tblftrs ) {
-     tblftr = ( struct ofp_table_features * ) list->data;
-     hton_table_features( table_features, tblftr );
-     list = list->next;
-     table_features = ( struct ofp_table_features * ) ( ( char * ) table_features + tblftr->length );
-   }
- 
-+  *offset += n_tblftrs;
-   if ( l != NULL ) {
-     xfree( l );
-   }
-@@ -1890,8 +2034,9 @@ create_table_features_multipart_reply( const uint32_t transaction_id, const uint
- 
- buffer *
- create_port_desc_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                  const list_element *port_desc_multipart_head  ) {
-+                                  const list_element *port_desc_multipart_head, int *more, int *offset ) {
-   uint16_t length;
-+  uint16_t msg_flags = flags;
-   uint16_t n_queues = 0;
-   buffer *buffer;
-   list_element *q = NULL;
-@@ -1902,12 +2047,24 @@ create_port_desc_multipart_reply( const uint32_t transaction_id, const uint16_t
-   debug( "Creating a port desc multipart reply ( xid = %#x, flags = %#x ).", transaction_id, flags );
- 
-   if ( port_desc_multipart_head != NULL ) {
-+    int cur = 0;
-+    while ( offset != NULL && cur < *offset ) {
-+      port_desc_multipart_head = port_desc_multipart_head->next;
-+      cur++;
-+    }
-     q = ( list_element * ) xmalloc( sizeof( list_element ) );
-     memcpy( q, port_desc_multipart_head, sizeof( list_element ) );
-   }
- 
-   queue = q;
-+  *more = 0;
-   while ( queue != NULL ) {
-+    if ( offsetof( struct ofp_multipart_reply, body )
-+         + sizeof( struct ofp_port ) * ( n_queues + 1 ) > UINT16_T_MAX ) {
-+      *more = 1;
-+      msg_flags |= OFPMPF_REPLY_MORE;
-+      break;
-+    }
-     n_queues++;
-     queue = queue->next;
-   }
-@@ -1916,20 +2073,23 @@ create_port_desc_multipart_reply( const uint32_t transaction_id, const uint16_t
- 
-   length = ( uint16_t ) ( offsetof( struct ofp_multipart_reply, body )
-                           + sizeof( struct ofp_port ) * n_queues );
--  buffer = create_multipart_reply( transaction_id, OFPMP_PORT_DESC, length, flags );
-+  buffer = create_multipart_reply( transaction_id, OFPMP_PORT_DESC, length, msg_flags );
-   assert( buffer != NULL );
- 
-   stats_reply = ( struct ofp_multipart_reply * ) buffer->data;
-   port_desc = ( struct ofp_port * ) stats_reply->body;
- 
-   queue = q;
--  while ( queue != NULL ) {
-+  int n_data = 0;
-+  while ( queue != NULL && n_data < n_queues ) {
-     qs = ( struct ofp_port * ) queue->data;
-     hton_port( port_desc, qs );
-     queue = queue->next;
-     port_desc++;
-+    n_data++;
-   }
- 
-+  *offset += n_queues;
-   if ( q != NULL ) {
-     xfree( q );
-   }
-diff --git a/trema-edge-master/src/lib/openflow_message.h b/trema-edge-master/src/lib/openflow_message.h
-index 302f292..09cc424 100644
---- a/trema-edge-master/src/lib/openflow_message.h
-+++ b/trema-edge-master/src/lib/openflow_message.h
-@@ -161,36 +161,46 @@ buffer *create_desc_multipart_reply( const uint32_t transaction_id, const uint16
-                                      const char serial_num[ SERIAL_NUM_LEN ],
-                                      const char dp_desc[ DESC_STR_LEN ] );
- buffer *create_flow_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                     const list_element *flow_multipart_head );
-+                                     const list_element *flow_multipart_head,
-+                                     int *more, int *offset );
- buffer *create_aggregate_multipart_reply( const uint32_t transaction_id,
-                                           const uint16_t flags,
-                                           const uint64_t packet_count, const uint64_t byte_count,
-                                           const uint32_t flow_count );
- buffer *create_table_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                      const list_element *table_multipart_head );
-+                                      const list_element *table_multipart_head,
-+                                      int *more, int *offset );
- buffer *create_port_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                     const list_element *port_multipart_head );
-+                                     const list_element *port_multipart_head,
-+                                     int *more, int *offset );
- buffer *create_queue_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                      const list_element *queue_multipart_head );
-+                                      const list_element *queue_multipart_head,
-+                                      int *more, int *offset );
- buffer *create_group_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                      const list_element *group_multipart_head );
-+                                      const list_element *group_multipart_head,
-+                                      int *more, int *offset );
- buffer *create_group_desc_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                           const list_element *group_desc_multipart_head );
-+                                           const list_element *group_desc_multipart_head,
-+                                           int *more, int *offset );
- buffer *create_group_features_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
-                                                const uint32_t types, const uint32_t capabilities,
-                                                const uint32_t max_groups[ 4 ], const uint32_t actions[ 4 ] );
- buffer *create_meter_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                      const list_element *meter_multipart_head );
-+                                      const list_element *meter_multipart_head,
-+                                      int *more, int *offset );
- buffer *create_meter_config_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                             const list_element *meter_config_multipart_head );
-+                                             const list_element *meter_config_multipart_head,
-+                                             int *more, int *offset );
- buffer *create_meter_features_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
-                                                const uint32_t max_meter, const uint32_t band_types,
-                                                const uint32_t capabilities, const uint8_t max_bands,
-                                                const uint8_t max_color );
- buffer *create_table_features_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                               const list_element *table_features_multipart_head );
-+                                               const list_element *table_features_multipart_head,
-+                                               int *more, int *offset );
- buffer *create_port_desc_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
--                                          const list_element *port_desc_multipart_head  );
-+                                          const list_element *port_desc_multipart_head,
-+                                          int *more, int *offset );
- buffer *create_experimenter_multipart_reply( const uint32_t transaction_id, const uint16_t flags,
-                                              const uint32_t experimenter, const uint32_t exp_type, const buffer *body );
- buffer *create_barrier_request( const uint32_t transaction_id );
 diff --git a/trema-edge-master/src/lib/packet_info.c b/trema-edge-master/src/lib/packet_info.c
-index fa9d98f..54b8c3e 100644
+index 848eb84..54b8c3e 100644
 --- a/trema-edge-master/src/lib/packet_info.c
 +++ b/trema-edge-master/src/lib/packet_info.c
-@@ -37,6 +37,12 @@ void
- calloc_packet_info( buffer *buf ) {
-   die_if_NULL( buf );
- 
-+  if ( buf->user_data != NULL && buf->user_data_free_function != NULL ) {
-+    ( *buf->user_data_free_function )( buf );
-+    assert( buf->user_data == NULL );
-+    assert( buf->user_data_free_function == NULL );
-+  }
-+
-   void *user_data = xcalloc( 1, sizeof( packet_info ) );
-   assert( user_data != NULL );
- 
-@@ -47,6 +53,31 @@ calloc_packet_info( buffer *buf ) {
+@@ -53,6 +53,31 @@ calloc_packet_info( buffer *buf ) {
  }
  
  
@@ -807,140 +64,6 @@ index 7a66bc8..aa9dd5f 100644
  packet_info get_packet_info( const buffer *frame );
  
  bool packet_type_eth_dix( const buffer *frame );
-diff --git a/trema-edge-master/src/lib/packet_parser.c b/trema-edge-master/src/lib/packet_parser.c
-index 45e2f26..7170f2b 100644
---- a/trema-edge-master/src/lib/packet_parser.c
-+++ b/trema-edge-master/src/lib/packet_parser.c
-@@ -67,7 +67,11 @@ parse_ether( buffer *buf ) {
-   }
- 
-   // vlan tag
--  if ( packet_info->eth_type == ETH_ETHTYPE_TPID ) {
-+  if ( packet_info->eth_type == ETH_ETHTYPE_TPID ||
-+       packet_info->eth_type == ETH_ETHTYPE_TPID1 ||
-+       packet_info->eth_type == ETH_ETHTYPE_TPID2 ||
-+       packet_info->eth_type == ETH_ETHTYPE_TPID3 ||
-+       packet_info->eth_type == ETH_ETHTYPE_TPID4 ) {
-     // Check the length of remained buffer
-     length = REMAINED_BUFFER_LENGTH( buf, ptr );
-     if ( length < sizeof( vlantag_header_t ) ) {
-@@ -85,12 +89,17 @@ parse_ether( buffer *buf ) {
-     packet_info->eth_type = ntohs( vlantag_header->type );
- 
-     packet_info->format |= ETH_8021Q;
-+    packet_info->l2_vlan_header = vlantag_header;
- 
-     ptr = ( void * ) ( vlantag_header + 1 );
-   }
- 
-   // Skip nested vlan headers.
--  while (  packet_info->eth_type == ETH_ETHTYPE_TPID ) {
-+  while ( packet_info->eth_type == ETH_ETHTYPE_TPID ||
-+          packet_info->eth_type == ETH_ETHTYPE_TPID1 ||
-+          packet_info->eth_type == ETH_ETHTYPE_TPID2 ||
-+          packet_info->eth_type == ETH_ETHTYPE_TPID3 ||
-+          packet_info->eth_type == ETH_ETHTYPE_TPID4 ) {
-     // Check the length of remained buffer
-     length = REMAINED_BUFFER_LENGTH( buf, ptr );
-     if ( length < sizeof( vlantag_header_t ) ) {
-diff --git a/trema-edge-master/src/switch/datapath/action_executor.c b/trema-edge-master/src/switch/datapath/action_executor.c
-index 118b450..b32c495 100644
---- a/trema-edge-master/src/switch/datapath/action_executor.c
-+++ b/trema-edge-master/src/switch/datapath/action_executor.c
-@@ -347,7 +347,7 @@ set_vlan_vid( buffer *frame, uint16_t value ) {
-   }
- 
-   vlantag_header_t *header = info->l2_vlan_header;
--  header->tci = ( uint16_t ) ( ( header->tci & htons( 0xf000 ) ) | ( value & 0x0fff ) );
-+  header->tci = ( uint16_t ) ( ( header->tci & htons( 0xf000 ) ) | htons( value & 0x0fff ) );
- 
-   return parse_frame( frame );
- }
-@@ -365,7 +365,7 @@ set_vlan_pcp( buffer *frame, uint8_t value ) {
-   }
- 
-   vlantag_header_t *header = info->l2_vlan_header;
--  header->tci = ( uint16_t ) ( ( header->tci & htons( 0x1fff ) ) | ( ( value & 0x07 ) << 5 ) );
-+  header->tci = ( uint16_t ) ( ( header->tci & htons( 0x1fff ) ) | htons( ( value & 0x07 ) << 13 ) );
- 
-   return parse_frame( frame );
- }
-@@ -939,12 +939,14 @@ push_linklayer_tag( buffer *frame, void *head, size_t tag_size ) {
-   assert( frame != NULL );
-   assert( head != NULL );
- 
--  char *tail = ( char * ) head + tag_size;
--  size_t length = frame->length - ( size_t ) ( ( char * ) head - ( char * ) frame->data );
--  // FIXME: this is not safe since append_back_buffer() may reallocate memory
--  append_back_buffer( frame, tag_size );
--  memmove( tail, head, length );
-+  size_t insert_offset = ( size_t ) ( ( char * ) head - ( char * ) frame->data );
-+   append_back_buffer( frame, tag_size );
-+  // head would be moved because append_back_buffer() may reallocate memory
-+  head = frame->data + insert_offset;
-+  memmove( head + tag_size, head, frame->length - insert_offset - tag_size );
-   memset( head, 0, tag_size );
-+
-+  assert( parse_packet( frame ) == true );
- }
- 
- 
-@@ -1121,12 +1123,13 @@ execute_action_push_mpls( buffer *frame, action *push_mpls ) {
-   if ( start == NULL ) {
-     start = info->l2_payload;
-   }
-+  size_t mpls_offset = start - frame->data;
- 
-   push_mpls_tag( frame, start );
-   ether_header_t *ether_header = frame->data;
-   ether_header->type = htons( push_mpls->ethertype );
- 
--  uint32_t *mpls = ( uint32_t * ) start;
-+  uint32_t *mpls = ( uint32_t * )( frame->data + mpls_offset );
-   *mpls = *mpls | htonl( 0x00000100 );
- 
-   return parse_frame( frame );
-@@ -1144,25 +1147,17 @@ execute_action_push_vlan( buffer *frame, action *push_vlan ) {
-   if ( start == NULL ) {
-     start = info->l2_payload;
-   }
-+  size_t vlan_offset = start - frame->data;
- 
--  push_vlan_tag( frame, start );
-   ether_header_t *ether_header = ( ether_header_t * ) frame->data;
--  ether_header->type = htons( push_vlan->ethertype );
--  vlantag_header_t *vlan_header = ( vlantag_header_t * ) start;
-+  uint16_t next_type = ether_header->type;
- 
--  uint16_t next_type = 0;
--  if ( packet_type_ipv4( frame ) ) {
--    next_type = ETH_ETHTYPE_IPV4;
--  }
--  else if ( packet_type_ipv6( frame ) ) {
--    next_type = ETH_ETHTYPE_IPV6;
--  }
--  else {
--    warn( "Unsupported packet found (%#x) while pushing a vlan tag.", info->format );
--    return true;
--  }
-+  push_vlan_tag( frame, start );
- 
--  vlan_header->type = htons( next_type );
-+  ether_header = ( ether_header_t * ) frame->data;
-+  ether_header->type = htons( push_vlan->ethertype );
-+  vlantag_header_t *vlan_header = ( vlantag_header_t * )( frame->data + vlan_offset );
-+  vlan_header->type = next_type;
- 
-   return parse_frame( frame );
- }
-@@ -1190,6 +1185,7 @@ execute_action_copy_ttl_out( buffer *frame, action *copy_ttl_out ) {
-     ttl = ipv6_header->hoplimit;
-   }
-   else {
-+    info = get_packet_info_data( frame );
-     warn( "A non-ip packet (%#x) found while setting the ttl field.", info->format );
-     return true;
-   }
 diff --git a/trema-edge-master/src/switch/datapath/async_event_notifier.c b/trema-edge-master/src/switch/datapath/async_event_notifier.c
 index 8484e9f..f354d3a 100644
 --- a/trema-edge-master/src/switch/datapath/async_event_notifier.c
@@ -959,18 +82,49 @@ index 8484e9f..f354d3a 100644
    }
  
 diff --git a/trema-edge-master/src/switch/datapath/ether_device.c b/trema-edge-master/src/switch/datapath/ether_device.c
-index 616032b..6d90487 100644
+index 616032b..85f4b46 100644
 --- a/trema-edge-master/src/switch/datapath/ether_device.c
 +++ b/trema-edge-master/src/switch/datapath/ether_device.c
-@@ -342,6 +342,7 @@ receive_frame( int fd, void *user_data ) {
+@@ -342,8 +342,33 @@ receive_frame( int fd, void *user_data ) {
              get_packet_buffers_length( device->recv_queue ), max_queue_length );
        frame = device->recv_buffer; // Use recv_buffer as a trash.
      }
 +    reset_buffer( frame );
      append_back_buffer( frame, device->mtu );
  
++#if WITH_PCAP
++    ssize_t length = 0;
++    struct pcap_pkthdr *header = NULL;
++    const u_char *packet = NULL;
++    int ret = pcap_next_ex( device->pcap, &header, &packet );
++    if ( ret == 1 ) {
++      length = header->caplen;
++      if ( length > frame->length ) {
++        append_back_buffer( frame, length - frame->length );
++      }
++      memcpy( frame->data, packet, length );
++    }
++    else {
++      if ( frame != device->recv_buffer ) {
++        mark_packet_buffer_as_used( device->recv_queue, frame );
++      }
++      if ( ret == -1 ) {
++        error( "Receive error ( device = %s, pcap_err = %s ).",
++             device->name, pcap_geterr( device->pcap ) );
++        break;
++      }
++      continue;
++    }
++#else // WITH_PCAP
      ssize_t length = recv( device->fd, frame->data, frame->length, MSG_DONTWAIT );
-@@ -362,9 +363,6 @@ receive_frame( int fd, void *user_data ) {
+     assert( length != 0 );
+     if ( length < 0 ) {
+@@ -358,13 +383,11 @@ receive_frame( int fd, void *user_data ) {
+              device->name, safe_strerror_r( errno, error_string, sizeof( error_string ) ), errno );
+       break;
+     }
++#endif
+     if ( frame != device->recv_buffer ) {
        frame->length = ( size_t ) length;
        enqueue_packet_buffer( device->recv_queue, frame );
      }
@@ -980,90 +134,104 @@ index 616032b..6d90487 100644
      count++;
    }
  
-diff --git a/trema-edge-master/src/switch/datapath/port_manager.c b/trema-edge-master/src/switch/datapath/port_manager.c
-index 48ded62..6164a89 100644
---- a/trema-edge-master/src/switch/datapath/port_manager.c
-+++ b/trema-edge-master/src/switch/datapath/port_manager.c
-@@ -501,6 +501,8 @@ get_port_stats( const uint32_t port_no, port_stats **stats, uint32_t *n_ports )
-     stat++;
-   }
- 
-+  delete_list( ports );
-+
-   if ( !unlock_mutex( &mutex ) ) {
-     return ERROR_UNLOCK;
-   }
-@@ -553,6 +555,8 @@ get_port_description( const uint32_t port_no, port_description **descriptions, u
-     description++;
-   }
- 
-+  delete_list( ports );
-+
-   if ( !unlock_mutex( &mutex ) ) {
-     return ERROR_UNLOCK;
-   }
-diff --git a/trema-edge-master/src/switch/switch/protocol-handler.c b/trema-edge-master/src/switch/switch/protocol-handler.c
-index f246061..5a8a38c 100644
---- a/trema-edge-master/src/switch/switch/protocol-handler.c
-+++ b/trema-edge-master/src/switch/switch/protocol-handler.c
-@@ -45,7 +45,8 @@ bool mock_switch_send_openflow_message( buffer *message );
- 
- static void
- _handle_hello( const uint32_t transaction_id, const uint8_t version, const buffer *version_data, void *user_data ) {
--  UNUSED( user_data );
-+  assert( user_data );
-+  struct protocol *protocol = user_data;
-   debug( "Hello received ( transaction_id = %#x, version = %#x ).", transaction_id, version );
- 
-   struct ofp_hello_elem_versionbitmap *versionbitmap = ( struct ofp_hello_elem_versionbitmap * ) version_data->data;
-@@ -55,7 +56,13 @@ _handle_hello( const uint32_t transaction_id, const uint8_t version, const buffe
-   if ( ( bitmap & ( ( uint32_t ) 1 << ofp_versions[ 0 ] ) ) != ( ( uint32_t ) ofp_versions[ 0 ] ) ) {
-     buffer *hello_buf = create_hello_elem_versionbitmap( transaction_id, ofp_versions,
-       sizeof( ofp_versions ) / sizeof( ofp_versions[ 0 ] ) );
--    switch_send_openflow_message( hello_buf );
-+    if ( switch_send_openflow_message( hello_buf ) ) {
-+      switch_features features;
-+      memset( &features, 0, sizeof( switch_features ) );
-+      get_switch_features( &features );
-+      protocol->ctrl.controller_connected = true;
-+      protocol->ctrl.capabilities = features.capabilities;
+@@ -390,6 +413,14 @@ flush_send_queue( int fd, void *user_data ) {
+   int count = 0;
+   buffer *buf = NULL;
+   while ( ( buf = peek_packet_buffer( device->send_queue ) ) != NULL && count < 256 ) {
++#if WITH_PCAP
++    if( pcap_sendpacket( device->pcap, buf->data, buf->length ) < 0 ){
++      error( "Failed to send a message to ethernet device ( device = %s, pcap_err = %s ).",
++        device->name, pcap_geterr( device->pcap ) );
++      return;
 +    }
-     free_buffer( hello_buf );
-   } else {
-     send_error_message( transaction_id, OFPET_HELLO_FAILED, OFPHFC_INCOMPATIBLE );
-@@ -81,13 +88,7 @@ _handle_features_request( const uint32_t transaction_id, void *user_data ) {
-    */
-   buffer *features_reply = create_features_reply( transaction_id, features.datapath_id, features.n_buffers,
-                                                   features.n_tables, features.auxiliary_id, features.capabilities );
--  if ( switch_send_openflow_message( features_reply ) ) {
--    protocol->ctrl.controller_connected = true;
--    /*
--     * save datapath's capabilities
--     */
--    protocol->ctrl.capabilities = features.capabilities;
--  }
-+  switch_send_openflow_message( features_reply );
-   free_buffer( features_reply );
- }
- void ( *handle_features_request )( const uint32_t transaction_id, void *user_data ) = _handle_features_request;
-diff --git a/trema-edge-master/src/switch/switch/stats-helper.h b/trema-edge-master/src/switch/switch/stats-helper.h
-index 7ae0553..af8d0dc 100644
---- a/trema-edge-master/src/switch/switch/stats-helper.h
-+++ b/trema-edge-master/src/switch/switch/stats-helper.h
-@@ -26,11 +26,14 @@ extern "C" {
++    ssize_t length = buf->length;
++#else
+     ssize_t length = sendto( device->fd, buf->data, buf->length, MSG_DONTWAIT, ( struct sockaddr * ) &sll, sizeof( sll ) );
+     if ( length < 0 ) {
+       if ( ( errno == EINTR ) || ( errno == EAGAIN ) || ( errno == EWOULDBLOCK ) ) {
+@@ -400,6 +431,7 @@ flush_send_queue( int fd, void *user_data ) {
+              device->name, safe_strerror_r( errno, error_string, sizeof( error_string ) ), errno );
+       return;
+     }
++#endif
  
+     if ( ( size_t ) length < buf->length ) {
+       remove_front_buffer( buf, ( size_t ) length );
+@@ -466,6 +498,15 @@ create_ether_device( const char *name, const size_t max_send_queue, const size_t
  
- #define SEND_STATS( stats_type, transaction_id, flags, list ) \
-+  int offset = 0; \
-   do {                                                        \
--    buffer *msg = create_##stats_type##_multipart_reply( transaction_id, flags, list ); \
-+    int more = 0; \
-+    buffer *msg = create_##stats_type##_multipart_reply( transaction_id, flags, list, &more, &offset ); \
-     switch_send_openflow_message( msg ); \
-     free_buffer( msg );                  \
--  } while( 0 )
-+    if ( more == 0) break; \
-+  } while( 1 )
+   close( nfd );
  
++#ifdef WITH_PCAP
++  char errbuf[ PCAP_ERRBUF_SIZE ];
++  pcap_t *handle = pcap_open_live( name, BUFSIZ, 1, 100, errbuf );
++  if( handle == NULL ){
++    error( "device %s open failed %s", name, errbuf );
++    return NULL;
++  }
++  int fd = pcap_get_selectable_fd( handle );
++#else // WITH_PCAP
+   int fd = socket( PF_PACKET, SOCK_RAW, htons( ETH_P_ALL ) );
+   if ( fd < 0 ) {
+     char error_string[ ERROR_STRING_SIZE ];
+@@ -495,11 +536,15 @@ create_ether_device( const char *name, const size_t max_send_queue, const size_t
+       break;
+     }
+   }
++#endif // WITH_PCAP
  
- void ( *handle_desc )( const uint32_t transaction_id, const char *progname );
+   ether_device *device = xmalloc( sizeof( ether_device ) );
+   memset( device, 0, sizeof( ether_device ) );
+   strncpy( device->name, name, IFNAMSIZ );
+   device->name[ IFNAMSIZ - 1 ] = '\0';
++#if WITH_PCAP
++  device->pcap = handle;
++#endif
+   device->fd = fd;
+   device->ifindex = ifindex;
+   memcpy( device->hw_addr, ifr.ifr_hwaddr.sa_data, ETH_ADDRLEN );
+@@ -530,6 +575,12 @@ void
+ delete_ether_device( ether_device *device ) {
+   assert( device != NULL );
+ 
++#if WITH_PCAP
++  if ( device->pcap != NULL ) {
++    pcap_close( device->pcap );
++    device->pcap = NULL;
++  }
++#endif
+   if ( device->fd >= 0 ) {
+     set_readable_safe( device->fd, false );
+     if ( get_packet_buffers_length( device->send_queue ) > 0 ) {
+@@ -654,7 +705,7 @@ send_frame( ether_device *device, buffer *frame ) {
+ 
+   debug( "Enqueueing a frame to send queue ( frame = %p, device = %s, queue length = %d, fd = %d ).",
+          frame, device->name, get_packet_buffers_length( device->send_queue ), device->fd );
+-  
++
+   buffer *copy = get_free_packet_buffer( device->send_queue );
+   assert( copy != NULL );
+   copy_buffer( copy, frame );
+diff --git a/trema-edge-master/src/switch/datapath/ether_device.h b/trema-edge-master/src/switch/datapath/ether_device.h
+index d97f309..ab1ab00 100644
+--- a/trema-edge-master/src/switch/datapath/ether_device.h
++++ b/trema-edge-master/src/switch/datapath/ether_device.h
+@@ -22,6 +22,9 @@
+ 
+ #include <net/if.h>
+ #include <stdint.h>
++#if WITH_PCAP
++#include <pcap.h>
++#endif
+ #include "ofdp_common.h"
+ #include "packet_buffer.h"
+ 
+@@ -59,6 +62,9 @@ typedef struct {
+     uint64_t rx_crc_err;
+     uint64_t collisions;
+   } stats;
++#if WITH_PCAP
++  pcap_t *pcap;
++#endif
+   int fd;
+   packet_buffers *send_queue;
+   packet_buffers *recv_queue;
