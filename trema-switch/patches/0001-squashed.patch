@@ -1,171 +1,119 @@
-diff --git a/trema-edge-master/src/lib/buffer.c b/trema-edge-master/src/lib/buffer.c
-index fe019cc..3004a3b 100644
---- a/trema-edge-master/src/lib/buffer.c
-+++ b/trema-edge-master/src/lib/buffer.c
-@@ -301,6 +301,13 @@ void
- reset_buffer( buffer *buf ) {
-   assert( buf != NULL );
- 
-+  if ( buf->user_data != NULL && buf->user_data_free_function != NULL ) {
-+    ( *buf->user_data_free_function )( buf );
-+    assert( buf->user_data == NULL );
-+    assert( buf->user_data_free_function == NULL );
-+  }
-+  buf->user_data = NULL;
-+
-   pthread_mutex_lock( ( ( private_buffer * ) buf )->mutex );
- 
-   private_buffer *pbuf = ( private_buffer * ) buf;
-diff --git a/trema-edge-master/src/lib/packet_info.c b/trema-edge-master/src/lib/packet_info.c
-index 848eb84..f6812c6 100644
---- a/trema-edge-master/src/lib/packet_info.c
-+++ b/trema-edge-master/src/lib/packet_info.c
-@@ -53,6 +53,31 @@ calloc_packet_info( buffer *buf ) {
+diff --git a/trema-edge-master/src/switch/datapath/action_executor.c b/trema-edge-master/src/switch/datapath/action_executor.c
+index 945a2db..ddfbd87 100644
+--- a/trema-edge-master/src/switch/datapath/action_executor.c
++++ b/trema-edge-master/src/switch/datapath/action_executor.c
+@@ -936,7 +936,7 @@ set_mpls_bos( buffer *frame, uint8_t value ) {
  }
  
  
-+void
-+copy_packet_info( buffer *dst, const buffer *src ) {
-+  die_if_NULL( src );
-+  die_if_NULL( dst );
-+  
-+  if ( src->user_data == NULL ) {
-+    return;
-+  }
-+  calloc_packet_info( dst );
-+  memcpy( dst->user_data, src->user_data, sizeof( packet_info ) );
-+
-+  packet_info *info = ( packet_info* ) dst->user_data;
-+  ssize_t offset = ( ( char * ) dst->data - ( char * ) src->data);
-+
-+  if(info->l2_header      != NULL) info->l2_header      = ( char * ) info->l2_header      + offset;
-+  if(info->l2_payload     != NULL) info->l2_payload     = ( char * ) info->l2_payload     + offset;
-+  if(info->l3_header      != NULL) info->l3_header      = ( char * ) info->l3_header      + offset;
-+  if(info->l3_payload     != NULL) info->l3_payload     = ( char * ) info->l3_payload     + offset;
-+  if(info->l4_header      != NULL) info->l4_header      = ( char * ) info->l4_header      + offset;
-+  if(info->l4_payload     != NULL) info->l4_payload     = ( char * ) info->l4_payload     + offset;
-+  if(info->l2_vlan_header != NULL) info->l2_vlan_header = ( char * ) info->l2_vlan_header + offset;
-+  if(info->l2_mpls_header != NULL) info->l2_mpls_header = ( char * ) info->l2_mpls_header + offset;
-+}
-+
-+
- packet_info
- get_packet_info( const buffer *frame ) {
-   die_if_NULL( frame );
-diff --git a/trema-edge-master/src/lib/packet_info.h b/trema-edge-master/src/lib/packet_info.h
-index 7a66bc8..aa9dd5f 100644
---- a/trema-edge-master/src/lib/packet_info.h
-+++ b/trema-edge-master/src/lib/packet_info.h
-@@ -237,6 +237,7 @@ bool parse_packet( buffer *buf );
- 
- void calloc_packet_info( buffer *frame );
- void free_packet_info( buffer *frame );
-+void copy_packet_info( buffer *dst, const buffer *src );
- packet_info get_packet_info( const buffer *frame );
- 
- bool packet_type_eth_dix( const buffer *frame );
-diff --git a/trema-edge-master/src/switch/datapath/action_executor.c b/trema-edge-master/src/switch/datapath/action_executor.c
-index 3190c53..945a2db 100644
---- a/trema-edge-master/src/switch/datapath/action_executor.c
-+++ b/trema-edge-master/src/switch/datapath/action_executor.c
-@@ -942,13 +942,11 @@ push_linklayer_tag( buffer *frame, void *head, size_t tag_size ) {
+-static void
++static void*
+ push_linklayer_tag( buffer *frame, void *head, size_t tag_size ) {
+   assert( frame != NULL );
    assert( head != NULL );
- 
-   size_t insert_offset = ( size_t ) ( ( char * ) head - ( char * ) frame->data );
--   append_back_buffer( frame, tag_size );
-+  append_back_buffer( frame, tag_size );
-   // head would be moved because append_back_buffer() may reallocate memory
+@@ -947,6 +947,8 @@ push_linklayer_tag( buffer *frame, void *head, size_t tag_size ) {
    head = ( char * ) frame->data + insert_offset;
    memmove( ( char * ) head + tag_size, head, frame->length - insert_offset - tag_size );
    memset( head, 0, tag_size );
--
--  assert( parse_packet( frame ) == true );
++
++  return head;
  }
  
  
-@@ -1093,22 +1091,7 @@ execute_action_pop_vlan( buffer *frame, action *pop_vlan ) {
-     return true;
-   }
+@@ -962,12 +964,12 @@ pop_linklayer_tag( buffer *frame, void *head, size_t tag_size ) {
+ }
  
--  pop_vlan_tag( frame, info->l2_vlan_header );
+ 
+-static void
++static void*
+ push_vlan_tag( buffer *frame, void *head ) {
+   assert( frame != NULL );
+   assert( head != NULL );
+ 
+-  push_linklayer_tag( frame, head, sizeof( vlantag_header_t ) );
++  return push_linklayer_tag( frame, head, sizeof( vlantag_header_t ) );
+ }
+ 
+ 
+@@ -980,12 +982,12 @@ pop_vlan_tag( buffer *frame, void *head ) {
+ }
+ 
+ 
+-static void
++static void*
+ push_mpls_tag( buffer *frame, void *head ) {
+   assert( frame != NULL );
+   assert( head != NULL );
+ 
+-  push_linklayer_tag( frame, head, sizeof( uint32_t ) );
++  return push_linklayer_tag( frame, head, sizeof( uint32_t ) );
+ }
+ 
+ 
+@@ -1104,18 +1106,27 @@ execute_action_push_mpls( buffer *frame, action *push_mpls ) {
+ 
+   packet_info *info = get_packet_info_data( frame );
+   assert( info != NULL );
+-  void *start = info->l2_mpls_header;
+-  if ( start == NULL ) {
+-    start = info->l2_payload;
++  
++  void *start = info->l2_payload;
++  uint32_t default_mpls = htonl( 0x00000100 );
++  if ( info->l2_mpls_header != NULL ) {
++    start = info->l2_mpls_header;
++    default_mpls = htonl( 0xFFFFFEFF ) & *( uint32_t * ) info->l2_mpls_header;
++  }
++  else if ( packet_type_ipv4( frame ) ) {
++    ipv4_header_t *ipv4_header = info->l3_header;
++    default_mpls = htonl( 0x00000100 | ipv4_header->ttl );
++  }
++  else if ( packet_type_ipv6( frame ) ) {
++    ipv6_header_t *ipv6_header = info->l3_header;
++    default_mpls = htonl( 0x00000100 | ipv6_header->hoplimit );
+   }
+-  size_t mpls_offset = ( size_t ) ( ( char * ) start - ( char * ) frame->data );
+ 
+-  push_mpls_tag( frame, start );
++  uint32_t *mpls = push_mpls_tag( frame, start );
++
+   ether_header_t *ether_header = frame->data;
+   ether_header->type = htons( push_mpls->ethertype );
 -
--  uint16_t next_type = 0;
--  if ( packet_type_ipv4( frame ) ) {
--    next_type = ETH_ETHTYPE_IPV4;
--  }
--  else if ( packet_type_ipv6( frame ) ) {
--    next_type = ETH_ETHTYPE_IPV6;
--  }
--  else {
--    warn( "Unsupported packet found (%#x) while popping a vlan tag.", info->format );
--    return true;
--  }
--
--  ether_header_t *ether_header = frame->data;
--  ether_header->type = htons( next_type );
-+  pop_vlan_tag( frame, ( char * ) info->l2_vlan_header - 2 ); // remove TPID ethertype and tci
+-  uint32_t *mpls = ( uint32_t * )( ( char * ) frame->data + mpls_offset );
+-  *mpls = *mpls | htonl( 0x00000100 );
++  *mpls = default_mpls;
  
    return parse_frame( frame );
  }
-@@ -1149,30 +1132,11 @@ execute_action_push_vlan( buffer *frame, action *push_vlan ) {
-   if ( start == NULL ) {
-     start = info->l2_payload;
-   }
--  size_t vlan_offset = ( size_t ) ( ( char * ) start - ( char * ) frame->data );
+@@ -1128,15 +1139,17 @@ execute_action_push_vlan( buffer *frame, action *push_vlan ) {
  
--  push_vlan_tag( frame, start );
-+  push_vlan_tag( frame, ( char * ) start - 2); // push vlan tag between source mac and ethertype
-+
+   packet_info *info = get_packet_info_data( frame );
+   assert( info != NULL );
+-  void *start = info->l2_vlan_header;
+-  if ( start == NULL ) {
+-    start = info->l2_payload;
++  
++  uint16_t default_tci = 0;
++  if ( info->l2_vlan_header != NULL ) {
++    default_tci = ( ( vlantag_header_t * ) ( info->l2_vlan_header ) )-> tci;
+   }
+ 
+-  push_vlan_tag( frame, ( char * ) start - 2); // push vlan tag between source mac and ethertype
++  void *vlan = push_vlan_tag( frame, ( char * ) info->l2_payload - 2); // push vlan tag between source mac and ethertype
+ 
    ether_header_t *ether_header = ( ether_header_t * ) frame->data;
    ether_header->type = htons( push_vlan->ethertype );
--  vlantag_header_t *vlan_header = ( vlantag_header_t * )( ( char * ) frame->data + vlan_offset );
--
--  uint16_t next_type = 0;
--  if ( packet_type_ipv4( frame ) ) {
--    next_type = ETH_ETHTYPE_IPV4;
--  }
--  else if ( packet_type_ipv6( frame ) ) {
--    next_type = ETH_ETHTYPE_IPV6;
--  }
--  else if ( packet_type_arp( frame ) ) {
--    next_type = ETH_ETHTYPE_ARP;
--  }
--  else {
--    info = get_packet_info_data( frame ); // push_vlan_tag() may change the address to info
--    warn( "Unsupported packet found (%#x) while pushing a vlan tag.", info->format );
--    return true;
--  }
--
--  vlan_header->type = htons( next_type );
++  ( ( vlantag_header_t * )( ( char * ) vlan + 2 ) )->tci = default_tci;
  
    return parse_frame( frame );
  }
-diff --git a/trema-edge-master/src/switch/datapath/async_event_notifier.c b/trema-edge-master/src/switch/datapath/async_event_notifier.c
-index 8484e9f..f354d3a 100644
---- a/trema-edge-master/src/switch/datapath/async_event_notifier.c
-+++ b/trema-edge-master/src/switch/datapath/async_event_notifier.c
-@@ -163,10 +163,8 @@ save_packet( const buffer *packet ) {
-   uint32_t buffer_id = get_buffer_id();
-   if ( buffer_id != UINT32_MAX ) {
-     packet_in_buffers[ buffer_id ].packet = duplicate_buffer( packet );
--    if ( packet->user_data != NULL ) {
--      calloc_packet_info( packet_in_buffers[ buffer_id ].packet );
--      memcpy( packet_in_buffers[ buffer_id ].packet->user_data, packet->user_data, sizeof( packet_info ) );
--    }
-+    // duplicate_buffer() copies user_data, which points to old packet addresses
-+    copy_packet_info( packet_in_buffers[ buffer_id ].packet, packet );
-     time_now( &packet_in_buffers[ buffer_id ].saved_at );
-   }
- 
 diff --git a/trema-edge-master/src/switch/datapath/ether_device.c b/trema-edge-master/src/switch/datapath/ether_device.c
-index 616032b..de6e4f1 100644
+index 6d90487..de6e4f1 100644
 --- a/trema-edge-master/src/switch/datapath/ether_device.c
 +++ b/trema-edge-master/src/switch/datapath/ether_device.c
-@@ -342,8 +342,32 @@ receive_frame( int fd, void *user_data ) {
-             get_packet_buffers_length( device->recv_queue ), max_queue_length );
-       frame = device->recv_buffer; // Use recv_buffer as a trash.
-     }
-+    reset_buffer( frame );
+@@ -345,6 +345,29 @@ receive_frame( int fd, void *user_data ) {
+     reset_buffer( frame );
      append_back_buffer( frame, device->mtu );
  
 +#if WITH_PCAP
@@ -194,7 +142,7 @@ index 616032b..de6e4f1 100644
      ssize_t length = recv( device->fd, frame->data, frame->length, MSG_DONTWAIT );
      assert( length != 0 );
      if ( length < 0 ) {
-@@ -358,13 +382,11 @@ receive_frame( int fd, void *user_data ) {
+@@ -359,6 +382,7 @@ receive_frame( int fd, void *user_data ) {
               device->name, safe_strerror_r( errno, error_string, sizeof( error_string ) ), errno );
        break;
      }
@@ -202,14 +150,7 @@ index 616032b..de6e4f1 100644
      if ( frame != device->recv_buffer ) {
        frame->length = ( size_t ) length;
        enqueue_packet_buffer( device->recv_queue, frame );
-     }
--    else {
--      reset_buffer( frame );
--    }
-     count++;
-   }
- 
-@@ -390,6 +412,14 @@ flush_send_queue( int fd, void *user_data ) {
+@@ -388,6 +412,14 @@ flush_send_queue( int fd, void *user_data ) {
    int count = 0;
    buffer *buf = NULL;
    while ( ( buf = peek_packet_buffer( device->send_queue ) ) != NULL && count < 256 ) {
@@ -224,7 +165,7 @@ index 616032b..de6e4f1 100644
      ssize_t length = sendto( device->fd, buf->data, buf->length, MSG_DONTWAIT, ( struct sockaddr * ) &sll, sizeof( sll ) );
      if ( length < 0 ) {
        if ( ( errno == EINTR ) || ( errno == EAGAIN ) || ( errno == EWOULDBLOCK ) ) {
-@@ -400,6 +430,7 @@ flush_send_queue( int fd, void *user_data ) {
+@@ -398,6 +430,7 @@ flush_send_queue( int fd, void *user_data ) {
               device->name, safe_strerror_r( errno, error_string, sizeof( error_string ) ), errno );
        return;
      }
@@ -232,7 +173,7 @@ index 616032b..de6e4f1 100644
  
      if ( ( size_t ) length < buf->length ) {
        remove_front_buffer( buf, ( size_t ) length );
-@@ -466,6 +497,15 @@ create_ether_device( const char *name, const size_t max_send_queue, const size_t
+@@ -464,6 +497,15 @@ create_ether_device( const char *name, const size_t max_send_queue, const size_t
  
    close( nfd );
  
@@ -248,7 +189,7 @@ index 616032b..de6e4f1 100644
    int fd = socket( PF_PACKET, SOCK_RAW, htons( ETH_P_ALL ) );
    if ( fd < 0 ) {
      char error_string[ ERROR_STRING_SIZE ];
-@@ -495,11 +535,15 @@ create_ether_device( const char *name, const size_t max_send_queue, const size_t
+@@ -493,11 +535,15 @@ create_ether_device( const char *name, const size_t max_send_queue, const size_t
        break;
      }
    }
@@ -264,7 +205,7 @@ index 616032b..de6e4f1 100644
    device->fd = fd;
    device->ifindex = ifindex;
    memcpy( device->hw_addr, ifr.ifr_hwaddr.sa_data, ETH_ADDRLEN );
-@@ -530,6 +574,12 @@ void
+@@ -528,6 +574,12 @@ void
  delete_ether_device( ether_device *device ) {
    assert( device != NULL );
  
@@ -277,7 +218,7 @@ index 616032b..de6e4f1 100644
    if ( device->fd >= 0 ) {
      set_readable_safe( device->fd, false );
      if ( get_packet_buffers_length( device->send_queue ) > 0 ) {
-@@ -654,7 +704,7 @@ send_frame( ether_device *device, buffer *frame ) {
+@@ -652,7 +704,7 @@ send_frame( ether_device *device, buffer *frame ) {
  
    debug( "Enqueueing a frame to send queue ( frame = %p, device = %s, queue length = %d, fd = %d ).",
           frame, device->name, get_packet_buffers_length( device->send_queue ), device->fd );
