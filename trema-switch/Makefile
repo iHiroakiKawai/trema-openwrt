@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=trema-switch
 PKG_RELEASE:=1
 
-PKG_SOURCE:=trema-edge-master.zip
+PKG_SOURCE:=master.zip
 PKG_SOURCE_URL:=https://github.com/trema/trema-edge/archive/
 PKG_MAINTAINER:=Hiroaki KAWAI <kawai@stratosphere.co.jp>
 
@@ -32,7 +32,7 @@ endef
 
 define Build/Compile
 	(cd $(PKG_BUILD_DIR)/trema-edge-master; \
-	  $(TARGET_CC) $(TARGET_CFLAGS) -Os -Wl,-s -std=gnu99 -DWITH_PCAP -D_GNU_SOURCE -DNOT_TESTED \
+	  $(TARGET_CC) $(TARGET_CFLAGS) -std=gnu99 -DWITH_PCAP -D_GNU_SOURCE -DNOT_TESTED \
 	  -Isrc/lib -Isrc/switch/datapath -Isrc/switch/switch \
 	  src/lib/*.c src/switch/datapath/*.c src/switch/switch/*.c \
 	  -lsqlite3 -lpthread -lrt -lpcap -o $(PKG_BUILD_DIR)/trema-switch)
