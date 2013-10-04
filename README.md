@@ -1,6 +1,6 @@
 About
 -----
-This is an openwrt feed providing trema-edge switch program.
+This is an openwrt feed providing trema-edge switch program - Openflow 1.3 switch for openwrt.
 
 To configure the openwrt buildroot, edit feeds.conf and 
 put this feed entry like following:
